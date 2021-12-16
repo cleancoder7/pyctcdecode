@@ -206,8 +206,7 @@ class BeamSearchDecoderCTC:
         self._idx2vocab = {n: c for n, c in enumerate(self._alphabet.labels)}
         self._is_bpe = alphabet.is_bpe
         self._model_key = os.urandom(16)
-        self._language_model = language_model
-        # BeamSearchDecoderCTC.model_container[self._model_key] = language_model
+        BeamSearchDecoderCTC.model_container[self._model_key] = language_model
 
     def reset_params(
         self,
@@ -217,8 +216,7 @@ class BeamSearchDecoderCTC:
         lm_score_boundary: Optional[bool] = None,
     ) -> None:
         """Reset parameters that don't require re-instantiating the model."""
-        # language_model = BeamSearchDecoderCTC.model_container[self._model_key]
-        language_model = self._language_model
+        language_model = BeamSearchDecoderCTC.model_container[self._model_key]
         if alpha is not None:
             language_model.alpha = alpha  # type: ignore
         if beta is not None:
@@ -236,8 +234,7 @@ class BeamSearchDecoderCTC:
     def cleanup(self) -> None:
         """Manual cleanup of models in class variable."""
         if self._model_key in BeamSearchDecoderCTC.model_container:
-            # del BeamSearchDecoderCTC.model_container[self._model_key]
-            del self._language_model
+            del BeamSearchDecoderCTC.model_container[self._model_key]
 
     def _get_lm_beams(
         self,
@@ -249,8 +246,7 @@ class BeamSearchDecoderCTC:
     ) -> List[LMBeam]:
         """Update score by averaging logit_score and lm_score."""
         # get language model and see if exists
-        # language_model = BeamSearchDecoderCTC.model_container[self._model_key]
-        language_model = self._language_model
+        language_model = BeamSearchDecoderCTC.model_container[self._model_key]
         # if no language model available then return raw score + hotwords as lm score
         if language_model is None:
             new_beams = []
@@ -330,8 +326,14 @@ class BeamSearchDecoderCTC:
         """Perform beam search decoding."""
         # local dictionaries to cache scores during decoding
         # we can pass in an input start state to keep the decoder stateful and working on realtime
-        # language_model = BeamSearchDecoderCTC.model_container[self._model_key]
-        language_model = self._language_model
+        try:
+            language_model = BeamSearchDecoderCTC.model_container[self._model_key]
+        except:
+            print('pyctcdecode : loading language model...')
+            language_model = LanguageModel.load_from_dir('/model/language_model')
+            BeamSearchDecoderCTC.model_container[self._model_key] = language_model
+            print('pyctcdecode : loaded language model.')
+
         if lm_start_state is None and language_model is not None:
             cached_lm_scores: Dict[str, Tuple[float, float, LMState]] = {
                 "": (0.0, 0.0, language_model.get_start_state())
@@ -679,8 +681,7 @@ class BeamSearchDecoderCTC:
         with open(alphabet_path, "w") as fi:
             fi.write(self._alphabet.dumps())
 
-        # lm = BeamSearchDecoderCTC.model_container[self._model_key]
-        lm = self._language_model
+        lm = BeamSearchDecoderCTC.model_container[self._model_key]
         if lm is None:
             logger.info("decoder has no language model.")
         else:
