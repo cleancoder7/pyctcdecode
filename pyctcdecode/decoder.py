@@ -8,8 +8,11 @@ import math
 import os
 from pathlib import Path
 from typing import Any, Collection, Dict, Iterable, List, Optional, Tuple, Union
-
+from pathlib import Path
 import numpy as np  # type: ignore
+
+def get_project_root() -> Path:
+    return Path(__file__).parent.parent
 
 from .alphabet import BPE_TOKEN, Alphabet, verify_alphabet_coverage
 from .constants import (
@@ -31,7 +34,7 @@ from .language_model import (
     load_unigram_set_from_arpa,
 )
 
-
+project_root_dir = get_project_root()
 logger = logging.getLogger(__name__)
 
 try:
@@ -329,8 +332,8 @@ class BeamSearchDecoderCTC:
         try:
             language_model = BeamSearchDecoderCTC.model_container[self._model_key]
         except:
-            print('pyctcdecode : loading language model...')
-            language_model = LanguageModel.load_from_dir('/model/language_model')
+            print(f'{project_root_dir} , pyctcdecode : loading language model...')
+            language_model = LanguageModel.load_from_dir(f'{project_root_dir}/model/language_model')
             BeamSearchDecoderCTC.model_container[self._model_key] = language_model
             print('pyctcdecode : loaded language model.')
 
