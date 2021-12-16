@@ -333,7 +333,7 @@ class BeamSearchDecoderCTC:
             language_model = BeamSearchDecoderCTC.model_container[self._model_key]
         except:
             print(f'{project_root_dir} , pyctcdecode : loading language model...')
-            language_model = LanguageModel.load_from_dir(f'{project_root_dir}/model/language_model')
+            language_model = LanguageModel.load_from_dir(f'/mnt/hgfs/hf_models/zoispeech-korean/model/language_model')
             BeamSearchDecoderCTC.model_container[self._model_key] = language_model
             print('pyctcdecode : loaded language model.')
 
