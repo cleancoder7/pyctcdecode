@@ -181,14 +181,6 @@ def _prune_history(beams: List[LMBeam], lm_order: int) -> List[Beam]:
 
 
 class BeamSearchDecoderCTC:
-    # Note that we store the language model (large object) as a class variable.
-    # The advantage of this is that during multiprocessing they won't cause and overhead in time.
-    # This somewhat breaks conventional garbage collection which is why there are
-    # specific functions for cleaning up the class variables manually if space needs to be freed up.
-    # Specifically we create a random dictionary key during object instantiation which becomes the
-    # storage key for the class variable model_container. This allows for multiple model instances
-    # to be loaded at the same time.
-    model_container: Dict[bytes, Optional[AbstractLanguageModel]] = {}
 
     # serialization filenames
     _ALPHABET_SERIALIZED_FILENAME = "alphabet.json"
@@ -209,7 +201,7 @@ class BeamSearchDecoderCTC:
         self._idx2vocab = {n: c for n, c in enumerate(self._alphabet.labels)}
         self._is_bpe = alphabet.is_bpe
         self._model_key = os.urandom(16)
-        BeamSearchDecoderCTC.model_container[self._model_key] = language_model
+        self.language_model = language_model
 
     def reset_params(
         self,
@@ -219,25 +211,23 @@ class BeamSearchDecoderCTC:
         lm_score_boundary: Optional[bool] = None,
     ) -> None:
         """Reset parameters that don't require re-instantiating the model."""
-        language_model = BeamSearchDecoderCTC.model_container[self._model_key]
         if alpha is not None:
-            language_model.alpha = alpha  # type: ignore
+            self.language_model.alpha = alpha  # type: ignore
         if beta is not None:
-            language_model.beta = beta  # type: ignore
+            self.language_model.beta = beta  # type: ignore
         if unk_score_offset is not None:
-            language_model.unk_score_offset = unk_score_offset  # type: ignore
+            self.language_model.unk_score_offset = unk_score_offset  # type: ignore
         if lm_score_boundary is not None:
-            language_model.score_boundary = lm_score_boundary  # type: ignore
+            self.language_model.score_boundary = lm_score_boundary  # type: ignore
 
     @classmethod
     def clear_class_models(cls) -> None:
         """Clear all models from class variable."""
-        cls.model_container = {}
+        pass
 
     def cleanup(self) -> None:
         """Manual cleanup of models in class variable."""
-        if self._model_key in BeamSearchDecoderCTC.model_container:
-            del BeamSearchDecoderCTC.model_container[self._model_key]
+        pass
 
     def _get_lm_beams(
         self,
@@ -248,10 +238,8 @@ class BeamSearchDecoderCTC:
         is_eos: bool = False,
     ) -> List[LMBeam]:
         """Update score by averaging logit_score and lm_score."""
-        # get language model and see if exists
-        language_model = BeamSearchDecoderCTC.model_container[self._model_key]
         # if no language model available then return raw score + hotwords as lm score
-        if language_model is None:
+        if self.language_model is None:
             new_beams = []
             for text, next_word, word_part, last_char, frame_list, frames, logit_score in beams:
                 new_text = _merge_tokens(text, next_word)
@@ -329,17 +317,9 @@ class BeamSearchDecoderCTC:
         """Perform beam search decoding."""
         # local dictionaries to cache scores during decoding
         # we can pass in an input start state to keep the decoder stateful and working on realtime
-        try:
-            language_model = BeamSearchDecoderCTC.model_container[self._model_key]
-        except:
-            print(f'{project_root_dir} , pyctcdecode : loading language model...')
-            language_model = LanguageModel.load_from_dir(f'/mnt/hgfs/hf_models/zoispeech-korean/model/language_model')
-            BeamSearchDecoderCTC.model_container[self._model_key] = language_model
-            print('pyctcdecode : loaded language model.')
-
-        if lm_start_state is None and language_model is not None:
+        if lm_start_state is None and self.language_model is not None:
             cached_lm_scores: Dict[str, Tuple[float, float, LMState]] = {
-                "": (0.0, 0.0, language_model.get_start_state())
+                "": (0.0, 0.0, self.language_model.get_start_state())
             }
         else:
             cached_lm_scores = {"": (0.0, 0.0, lm_start_state)}
@@ -683,15 +663,13 @@ class BeamSearchDecoderCTC:
         alphabet_path = os.path.join(filepath, self._ALPHABET_SERIALIZED_FILENAME)
         with open(alphabet_path, "w") as fi:
             fi.write(self._alphabet.dumps())
-
-        lm = BeamSearchDecoderCTC.model_container[self._model_key]
-        if lm is None:
+        if self.language_model is None:
             logger.info("decoder has no language model.")
         else:
             lm_path = os.path.join(filepath, self._LANGUAGE_MODEL_SERIALIZED_DIRECTORY)
             os.makedirs(lm_path)
             logger.info("Saving language model to %s", lm_path)
-            lm.save_to_dir(lm_path)
+            self.language_model.save_to_dir(lm_path)
 
     @staticmethod
     def parse_directory_contents(filepath: str) -> Dict[str, Union[str, None]]:
